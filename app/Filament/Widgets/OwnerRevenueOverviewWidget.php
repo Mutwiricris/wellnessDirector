@@ -9,11 +9,14 @@ use App\Models\Payment;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Carbon\Carbon;
 
 class OwnerRevenueOverviewWidget extends BaseWidget
 {
-    protected static ?string $pollingInterval = '30s';
+    use InteractsWithPageFilters;
+    
+    protected static ?string $pollingInterval = '15s';
     
     protected int | string | array $columnSpan = [
         'default' => 'full',
@@ -29,33 +32,38 @@ class OwnerRevenueOverviewWidget extends BaseWidget
         $tenant = Filament::getTenant();
         if (!$tenant) return [];
 
-        $today = Carbon::today();
-        $thisMonth = Carbon::now()->startOfMonth();
-        $lastMonth = Carbon::now()->subMonth()->startOfMonth();
-        $lastMonthEnd = Carbon::now()->subMonth()->endOfMonth();
+        // Use global date filters
+        $startDate = $this->filters['startDate'] ?? now()->startOfMonth();
+        $endDate = $this->filters['endDate'] ?? now()->endOfMonth();
+        
+        // Calculate previous period for comparison
+        $periodDays = Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate));
+        $previousStart = Carbon::parse($startDate)->subDays($periodDays + 1);
+        $previousEnd = Carbon::parse($startDate)->subDay();
 
         // Today's Revenue
+        $today = Carbon::today();
         $todayRevenue = $this->getTotalRevenue($today, $today->copy()->endOfDay(), $tenant->id);
         
-        // This Month's Revenue
-        $thisMonthRevenue = $this->getTotalRevenue($thisMonth, Carbon::now(), $tenant->id);
+        // Current Period Revenue
+        $currentRevenue = $this->getTotalRevenue(Carbon::parse($startDate), Carbon::parse($endDate), $tenant->id);
         
-        // Last Month's Revenue for comparison
-        $lastMonthRevenue = $this->getTotalRevenue($lastMonth, $lastMonthEnd, $tenant->id);
+        // Previous Period Revenue for comparison
+        $previousRevenue = $this->getTotalRevenue($previousStart, $previousEnd, $tenant->id);
         
         // Calculate growth percentage
-        $growthPercentage = $lastMonthRevenue > 0 
-            ? round((($thisMonthRevenue - $lastMonthRevenue) / $lastMonthRevenue) * 100, 1)
+        $growthPercentage = $previousRevenue > 0 
+            ? round((($currentRevenue - $previousRevenue) / $previousRevenue) * 100, 1)
             : 0;
 
-        // Average daily revenue this month
-        $daysInMonth = Carbon::now()->day;
-        $avgDailyRevenue = $daysInMonth > 0 ? $thisMonthRevenue / $daysInMonth : 0;
+        // Average daily revenue for current period
+        $periodDays = max(1, $periodDays);
+        $avgDailyRevenue = $currentRevenue / $periodDays;
 
-        // Revenue breakdown
-        $serviceRevenue = $this->getServiceRevenue($thisMonth, Carbon::now(), $tenant->id);
-        $productRevenue = $this->getProductRevenue($thisMonth, Carbon::now(), $tenant->id);
-        $packageRevenue = $this->getPackageRevenue($thisMonth, Carbon::now(), $tenant->id);
+        // Revenue breakdown for current period
+        $serviceRevenue = $this->getServiceRevenue(Carbon::parse($startDate), Carbon::parse($endDate), $tenant->id);
+        $productRevenue = $this->getProductRevenue(Carbon::parse($startDate), Carbon::parse($endDate), $tenant->id);
+        $packageRevenue = $this->getPackageRevenue(Carbon::parse($startDate), Carbon::parse($endDate), $tenant->id);
 
         return [
             Stat::make('Today\'s Revenue', 'KES ' . number_format($todayRevenue, 2))
@@ -64,30 +72,30 @@ class OwnerRevenueOverviewWidget extends BaseWidget
                 ->color('success')
                 ->chart($this->getRevenueChart($tenant->id, 7)), // Last 7 days
 
-            Stat::make('Monthly Revenue', 'KES ' . number_format($thisMonthRevenue, 2))
+            Stat::make('Monthly Revenue', 'KES ' . number_format($currentRevenue, 2))
                 ->description($growthPercentage >= 0 
-                    ? "↗️ {$growthPercentage}% from last month" 
-                    : "↘️ {$growthPercentage}% from last month")
+                    ? "↗️ " . number_format(abs($growthPercentage), 1) . "% from previous period" 
+                    : "↘️ " . number_format(abs($growthPercentage), 1) . "% from previous period")
                 ->descriptionIcon($growthPercentage >= 0 ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down')
                 ->color($growthPercentage >= 0 ? 'success' : 'danger'),
 
             Stat::make('Avg Daily Revenue', 'KES ' . number_format($avgDailyRevenue, 2))
-                ->description('Average per day this month')
+                ->description('Average per day this period')
                 ->descriptionIcon('heroicon-m-calculator')
                 ->color('info'),
 
             Stat::make('Service Revenue', 'KES ' . number_format($serviceRevenue, 2))
-                ->description(number_format(($serviceRevenue / max($thisMonthRevenue, 1)) * 100, 1) . '% of total')
+                ->description(number_format(($serviceRevenue / max($currentRevenue, 1)) * 100, 1) . '% of total')
                 ->descriptionIcon('heroicon-m-sparkles')
                 ->color('primary'),
 
             Stat::make('Product Revenue', 'KES ' . number_format($productRevenue, 2))
-                ->description(number_format(($productRevenue / max($thisMonthRevenue, 1)) * 100, 1) . '% of total')
+                ->description(number_format(($productRevenue / max($currentRevenue, 1)) * 100, 1) . '% of total')
                 ->descriptionIcon('heroicon-m-shopping-bag')
                 ->color('warning'),
 
             Stat::make('Package Revenue', 'KES ' . number_format($packageRevenue, 2))
-                ->description(number_format(($packageRevenue / max($thisMonthRevenue, 1)) * 100, 1) . '% of total')
+                ->description(number_format(($packageRevenue / max($currentRevenue, 1)) * 100, 1) . '% of total')
                 ->descriptionIcon('heroicon-m-gift')
                 ->color('info'),
         ];

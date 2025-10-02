@@ -8,20 +8,24 @@ use App\Models\PackageSale;
 use App\Models\GiftVoucher;
 use Filament\Widgets\ChartWidget;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
 class RevenueStreamWidget extends ChartWidget
 {
+    use InteractsWithPageFilters;
     protected static ?string $heading = 'Revenue Stream Analysis';
     
     protected static ?int $sort = 2;
+
+    protected static ?string $pollingInterval = '15s';
     
     protected int | string | array $columnSpan = 'full';
 
     protected function getData(): array
     {
         $tenant = Filament::getTenant();
-        $dateRange = $this->getDateRange();
-        [$startDate, $endDate] = $dateRange;
+        $startDate = $this->filters['startDate'] ?? now()->startOfMonth();
+        $endDate = $this->filters['endDate'] ?? now()->endOfMonth();
 
         // Service Revenue (Bookings)
         $serviceRevenue = Booking::query()
@@ -40,9 +44,9 @@ class RevenueStreamWidget extends ChartWidget
         // Package Revenue
         $packageRevenue = PackageSale::query()
             ->when($tenant, fn($q) => $q->where('branch_id', $tenant->id))
-            ->whereBetween('sale_date', [$startDate, $endDate])
+            ->whereBetween('purchased_at', [$startDate, $endDate])
             ->where('payment_status', 'completed')
-            ->sum('total_amount');
+            ->sum('final_price');
 
         // Gift Voucher Revenue
         $voucherRevenue = GiftVoucher::query()
@@ -127,10 +131,4 @@ class RevenueStreamWidget extends ChartWidget
         ];
     }
 
-    private function getDateRange(): array
-    {
-        // This should be passed from the parent component
-        // For now, default to current month
-        return [now()->startOfMonth(), now()->endOfMonth()];
-    }
 }

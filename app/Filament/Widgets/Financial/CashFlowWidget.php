@@ -9,20 +9,25 @@ use App\Models\StaffCommission;
 use App\Models\Booking;
 use Filament\Widgets\ChartWidget;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
 class CashFlowWidget extends ChartWidget
 {
+    use InteractsWithPageFilters;
+    
     protected static ?string $heading = 'Cash Flow Analysis - Inflows vs Outflows';
     
     protected static ?int $sort = 3;
+    
+    protected static ?string $pollingInterval = '15s';
     
     protected int | string | array $columnSpan = 'full';
 
     protected function getData(): array
     {
         $tenant = Filament::getTenant();
-        $dateRange = $this->getDateRange();
-        [$startDate, $endDate] = $dateRange;
+        $startDate = $this->filters['startDate'] ?? now()->startOfMonth();
+        $endDate = $this->filters['endDate'] ?? now()->endOfMonth();
 
         // Generate daily cash flow data for the period
         $days = [];
@@ -119,16 +124,16 @@ class CashFlowWidget extends ChartWidget
         // Package sales
         $packageInflows = \App\Models\PackageSale::query()
             ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
-            ->whereBetween('purchase_date', [$dayStart, $dayEnd])
+            ->whereBetween('purchased_at', [$dayStart, $dayEnd])
             ->where('payment_status', 'completed')
-            ->sum('total_amount') ?? 0;
+            ->sum('final_price') ?? 0;
 
         // Gift voucher sales
         $voucherInflows = \App\Models\GiftVoucher::query()
             ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->whereBetween('purchase_date', [$dayStart, $dayEnd])
-            ->where('status', 'purchased')
-            ->sum('value') ?? 0;
+            ->where('status', 'active')
+            ->sum('original_amount') ?? 0;
 
         return (float) ($serviceInflows + $posInflows + $packageInflows + $voucherInflows);
     }
@@ -273,8 +278,4 @@ class CashFlowWidget extends ChartWidget
         ];
     }
 
-    private function getDateRange(): array
-    {
-        return [now()->startOfMonth(), now()->endOfMonth()];
-    }
 }

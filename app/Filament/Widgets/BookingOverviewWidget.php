@@ -11,6 +11,8 @@ class BookingOverviewWidget extends BaseWidget
 {
     protected static ?int $sort = 2;
 
+    protected static ?string $pollingInterval = '15s';
+
     protected function getStats(): array
     {
         $tenant = Filament::getTenant();
@@ -68,12 +70,23 @@ class BookingOverviewWidget extends BaseWidget
             ? (($thisWeekBookings - $lastWeekBookings) / $lastWeekBookings) * 100 
             : 0;
 
+        // Data for chart (bookings in the last 7 days)
+        $bookingsLast7Days = Booking::where('branch_id', $tenant->id)
+            ->whereBetween('appointment_date', [now()->subDays(6)->startOfDay(), now()->endOfDay()])
+            ->selectRaw('DATE(appointment_date) as date, COUNT(*) as count')
+            ->groupBy('date')
+            ->orderBy('date', 'ASC')
+            ->pluck('count', 'date')
+            ->toArray();
+
+        $chartData = array_values(array_pad($bookingsLast7Days, -7, 0));
+
         return [
             Stat::make('Today\'s Bookings', $todayBookings)
                 ->description($confirmedBookings . ' confirmed, ' . $completedBookings . ' completed')
                 ->descriptionIcon('heroicon-m-calendar-days')
                 ->color('info')
-                ->chart([7, 2, 10, 3, 15, 4, 17]),
+                ->chart($chartData),
 
             Stat::make('Today\'s Revenue', 'KES ' . number_format($todayRevenue, 0))
                 ->description($pendingPayments . ' pending payments')

@@ -9,10 +9,12 @@ use App\Models\Expense;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
 class FinancialOverviewWidget extends BaseWidget
 {
-    protected static ?string $pollingInterval = '30s';
+    use InteractsWithPageFilters;
+    protected static ?string $pollingInterval = '15s';
 
     protected int | string | array $columnSpan = 'full';
 
@@ -20,9 +22,8 @@ class FinancialOverviewWidget extends BaseWidget
     {
         $tenant = Filament::getTenant();
         
-        // Get date range from parent component
-        $dateRange = $this->getDateRange();
-        [$startDate, $endDate] = $dateRange;
+        $startDate = $this->filters['startDate'] ?? now()->startOfMonth();
+        $endDate = $this->filters['endDate'] ?? now()->endOfMonth();
 
         // Total Revenue Calculation
         $totalRevenue = $this->calculateTotalRevenue($tenant?->id, $startDate, $endDate);
@@ -207,10 +208,4 @@ class FinancialOverviewWidget extends BaseWidget
         return $data;
     }
 
-    private function getDateRange(): array
-    {
-        // This should be passed from the parent component
-        // For now, default to current month
-        return [now()->startOfMonth(), now()->endOfMonth()];
-    }
 }

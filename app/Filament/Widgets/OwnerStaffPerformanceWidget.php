@@ -9,11 +9,14 @@ use App\Models\StaffSchedule;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Carbon\Carbon;
 
 class OwnerStaffPerformanceWidget extends BaseWidget
 {
-    protected static ?string $pollingInterval = '120s';
+    use InteractsWithPageFilters;
+    
+    protected static ?string $pollingInterval = '15s';
     
     protected int | string | array $columnSpan = [
         'default' => 'full',

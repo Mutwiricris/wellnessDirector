@@ -2,13 +2,12 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\DirectorDashboard;
 use App\Models\Branch;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use App\Filament\Pages\DirectorDashboard;
-use Filament\Pages;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -27,11 +26,11 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->default()
             ->id('director')
-            ->path('director')
+            // ->path('director')
             ->login()
             ->tenant(Branch::class)
             ->tenantBillingProvider(null)
-            ->brandName('Wellness Director Portal')
+            ->brandName('Ascend spa ')
             ->favicon(asset('favicon.ico'))
             ->colors([
                 'primary' => Color::Pink,

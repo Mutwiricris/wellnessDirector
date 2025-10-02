@@ -8,13 +8,15 @@ use App\Models\PackageSale;
 use App\Models\GiftVoucher;
 use Filament\Widgets\ChartWidget;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Carbon\Carbon;
 
 class OwnerRevenueStreamsWidget extends ChartWidget
 {
-    protected static ?string $heading = 'Revenue Streams Analysis';
+    use InteractsWithPageFilters;
     
-    protected static ?string $pollingInterval = '300s';
+    protected static ?string $pollingInterval = '15s';
+    protected static ?string $heading = 'Revenue Streams Analysis';
     
     protected int | string | array $columnSpan = [
         'default' => 'full',

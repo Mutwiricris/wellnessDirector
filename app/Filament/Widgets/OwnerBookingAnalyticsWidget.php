@@ -7,13 +7,15 @@ use App\Models\User;
 use App\Models\Service;
 use Filament\Widgets\ChartWidget;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Carbon\Carbon;
 
 class OwnerBookingAnalyticsWidget extends ChartWidget
 {
-    protected static ?string $heading = 'Booking Analytics & Trends';
+    use InteractsWithPageFilters;
     
-    protected static ?string $pollingInterval = '60s';
+    protected static ?string $pollingInterval = '15s';
+    protected static ?string $heading = 'Booking Analytics & Trends';
     
     protected int | string | array $columnSpan = [
         'default' => 'full',
@@ -29,12 +31,13 @@ class OwnerBookingAnalyticsWidget extends ChartWidget
         $tenant = Filament::getTenant();
         if (!$tenant) return ['datasets' => [], 'labels' => []];
 
-        $thisMonth = Carbon::now()->startOfMonth();
-        $now = Carbon::now();
+        // Use global date filters
+        $startDate = $this->filters['startDate'] ?? now()->startOfMonth();
+        $endDate = $this->filters['endDate'] ?? now()->endOfMonth();
 
-        // Get booking data for the last 30 days
-        $bookingData = $this->getBookingTrends($tenant->id);
-        $conversionData = $this->getConversionRates($tenant->id);
+        // Get booking data for the selected period
+        $bookingData = $this->getBookingTrends($tenant->id, $startDate, $endDate);
+        $conversionData = $this->getConversionRates($tenant->id, $startDate, $endDate);
 
         return [
             'datasets' => [
@@ -118,8 +121,11 @@ class OwnerBookingAnalyticsWidget extends ChartWidget
         ];
     }
 
-    private function getBookingTrends(int $branchId): array
+    private function getBookingTrends(int $branchId, $startDate = null, $endDate = null): array
     {
+        $startDate = Carbon::parse($startDate ?? now()->startOfMonth());
+        $endDate = Carbon::parse($endDate ?? now()->endOfMonth());
+        
         $data = [
             'total' => [],
             'completed' => [],
@@ -127,8 +133,11 @@ class OwnerBookingAnalyticsWidget extends ChartWidget
             'labels' => [],
         ];
 
-        for ($i = 29; $i >= 0; $i--) {
-            $date = Carbon::today()->subDays($i);
+        // Generate daily data for the selected period (limit to 30 days for chart readability)
+        $days = min(30, $startDate->diffInDays($endDate) + 1);
+        
+        for ($i = 0; $i < $days; $i++) {
+            $date = $startDate->copy()->addDays($i);
             $data['labels'][] = $date->format('M j');
 
             $totalBookings = Booking::where('branch_id', $branchId)
@@ -153,17 +162,17 @@ class OwnerBookingAnalyticsWidget extends ChartWidget
         return $data;
     }
 
-    private function getConversionRates(int $branchId): array
+    private function getConversionRates(int $branchId, $startDate = null, $endDate = null): array
     {
-        $thisMonth = Carbon::now()->startOfMonth();
-        $now = Carbon::now();
+        $startDate = $startDate ?? Carbon::now()->startOfMonth();
+        $endDate = $endDate ?? Carbon::now();
 
         $totalBookings = Booking::where('branch_id', $branchId)
-            ->whereBetween('appointment_date', [$thisMonth->toDateString(), $now->toDateString()])
+            ->whereBetween('appointment_date', [$startDate, $endDate])
             ->count();
 
         $completedBookings = Booking::where('branch_id', $branchId)
-            ->whereBetween('appointment_date', [$thisMonth->toDateString(), $now->toDateString()])
+            ->whereBetween('appointment_date', [$startDate, $endDate])
             ->where('status', 'completed')
             ->count();
 

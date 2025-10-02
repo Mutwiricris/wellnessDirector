@@ -65,6 +65,8 @@ class PosTransactionResource extends Resource
                                             ->required(),
                                         Forms\Components\TextInput::make('phone')
                                             ->tel(),
+                                        // Forms\Components\TextInput::make('address')
+                                        //     ->required(),    
                                         Forms\Components\TextInput::make('email')
                                             ->email(),
                                     ]),

@@ -174,7 +174,7 @@ class PaymentResource extends Resource
                     ->label('Booking')
                     ->searchable()
                     ->sortable()
-                    ->url(fn ($record) => route('filament.admin.resources.bookings.view', ['tenant' => \Filament\Facades\Filament::getTenant(), 'record' => $record->booking_id]))
+                    ->url(fn ($record) => route('filament.director.resources.bookings.view', ['tenant' => \Filament\Facades\Filament::getTenant(), 'record' => $record->booking_id]))
                     ->color('primary'),
                     
                 Tables\Columns\TextColumn::make('booking.client.first_name')

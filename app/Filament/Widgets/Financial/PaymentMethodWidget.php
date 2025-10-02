@@ -7,20 +7,25 @@ use App\Models\PosTransaction;
 use App\Models\PosPaymentSplit;
 use Filament\Widgets\ChartWidget;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 
 class PaymentMethodWidget extends ChartWidget
 {
+    use InteractsWithPageFilters;
+    
     protected static ?string $heading = 'Payment Method Distribution & Processing Costs';
     
     protected static ?int $sort = 4;
+    
+    protected static ?string $pollingInterval = '15s';
     
     protected int | string | array $columnSpan = 'full';
 
     protected function getData(): array
     {
         $tenant = Filament::getTenant();
-        $dateRange = $this->getDateRange();
-        [$startDate, $endDate] = $dateRange;
+        $startDate = $this->filters['startDate'] ?? now()->startOfMonth();
+        $endDate = $this->filters['endDate'] ?? now()->endOfMonth();
 
         // Get payment method distribution and processing costs
         $paymentData = $this->getPaymentMethodData($tenant?->id, $startDate, $endDate);
@@ -98,7 +103,7 @@ class PaymentMethodWidget extends ChartWidget
 
             // Get POS split payments
             $posSplitAmount = PosPaymentSplit::query()
-                ->whereHas('transaction', function($q) use ($branchId, $startDate, $endDate) {
+                ->whereHas('posTransaction', function($q) use ($branchId, $startDate, $endDate) {
                     $q->when($branchId, fn($subQ) => $subQ->where('branch_id', $branchId))
                       ->whereBetween('created_at', [$startDate, $endDate])
                       ->where('payment_status', 'completed');
@@ -197,8 +202,4 @@ class PaymentMethodWidget extends ChartWidget
         ];
     }
 
-    private function getDateRange(): array
-    {
-        return [now()->startOfMonth(), now()->endOfMonth()];
-    }
 }

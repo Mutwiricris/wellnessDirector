@@ -10,11 +10,14 @@ use App\Models\Payment;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Carbon\Carbon;
 
 class OwnerProfitabilityWidget extends BaseWidget
 {
-    protected static ?string $pollingInterval = '60s';
+    use InteractsWithPageFilters;
+    
+    protected static ?string $pollingInterval = '15s';
     
     protected int | string | array $columnSpan = [
         'default' => 'full',
@@ -30,48 +33,52 @@ class OwnerProfitabilityWidget extends BaseWidget
         $tenant = Filament::getTenant();
         if (!$tenant) return [];
 
-        $thisMonth = Carbon::now()->startOfMonth();
-        $now = Carbon::now();
-        $lastMonth = Carbon::now()->subMonth()->startOfMonth();
-        $lastMonthEnd = Carbon::now()->subMonth()->endOfMonth();
+        $startDate = $this->filters['startDate'] ?? now()->startOfMonth();
+        $endDate = $this->filters['endDate'] ?? now()->endOfMonth();
+        
+        // Previous period for comparison (same duration as current period)
+        $periodDays = Carbon::parse($startDate)->diffInDays(Carbon::parse($endDate));
+        $previousStart = Carbon::parse($startDate)->subDays($periodDays + 1);
+        $previousEnd = Carbon::parse($startDate)->subDay();
 
         // Revenue
-        $totalRevenue = $this->getTotalRevenue($thisMonth, $now, $tenant->id);
-        $lastMonthRevenue = $this->getTotalRevenue($lastMonth, $lastMonthEnd, $tenant->id);
+        $totalRevenue = $this->getTotalRevenue($startDate, $endDate, $tenant->id);
+        $previousRevenue = $this->getTotalRevenue($previousStart, $previousEnd, $tenant->id);
 
         // Expenses
-        $totalExpenses = $this->getTotalExpenses($thisMonth, $now, $tenant->id);
-        $lastMonthExpenses = $this->getTotalExpenses($lastMonth, $lastMonthEnd, $tenant->id);
+        $totalExpenses = $this->getTotalExpenses($startDate, $endDate, $tenant->id);
+        $previousExpenses = $this->getTotalExpenses($previousStart, $previousEnd, $tenant->id);
 
         // Staff Costs
-        $staffCosts = $this->getStaffCosts($thisMonth, $now, $tenant->id);
+        $staffCosts = $this->getStaffCosts($startDate, $endDate, $tenant->id);
+        $previousStaffCosts = $this->getStaffCosts($previousStart, $previousEnd, $tenant->id);
 
         // Net Profit
         $netProfit = $totalRevenue - $totalExpenses - $staffCosts;
-        $lastMonthProfit = $lastMonthRevenue - $lastMonthExpenses;
+        $previousProfit = $previousRevenue - $previousExpenses - $previousStaffCosts;
 
         // Profit Margin
         $profitMargin = $totalRevenue > 0 ? ($netProfit / $totalRevenue) * 100 : 0;
-        $lastMonthMargin = $lastMonthRevenue > 0 ? ($lastMonthProfit / $lastMonthRevenue) * 100 : 0;
+        $previousMargin = $previousRevenue > 0 ? ($previousProfit / $previousRevenue) * 100 : 0;
 
         // Growth calculations
-        $profitGrowth = $lastMonthProfit > 0 
-            ? (($netProfit - $lastMonthProfit) / abs($lastMonthProfit)) * 100 
+        $profitGrowth = $previousProfit > 0 
+            ? (($netProfit - $previousProfit) / abs($previousProfit)) * 100 
             : 0;
 
         return [
             Stat::make('Net Profit', 'KES ' . number_format($netProfit, 2))
                 ->description($profitGrowth >= 0 
-                    ? "↗️ {$profitGrowth}% from last month" 
-                    : "↘️ {$profitGrowth}% from last month")
+                    ? "↗️ " . number_format(abs($profitGrowth), 1) . "% from previous period" 
+                    : "↘️ " . number_format(abs($profitGrowth), 1) . "% from previous period")
                 ->descriptionIcon($netProfit >= 0 ? 'heroicon-m-arrow-trending-up' : 'heroicon-m-arrow-trending-down')
                 ->color($netProfit >= 0 ? 'success' : 'danger')
                 ->chart($this->getProfitChart($tenant->id)),
 
             Stat::make('Profit Margin', number_format($profitMargin, 1) . '%')
-                ->description($profitMargin >= $lastMonthMargin 
-                    ? "↗️ Improved from " . number_format($lastMonthMargin, 1) . "%" 
-                    : "↘️ Down from " . number_format($lastMonthMargin, 1) . "%")
+                ->description($profitMargin >= $previousMargin 
+                    ? "↗️ Improved from " . number_format($previousMargin, 1) . "%" 
+                    : "↘️ Down from " . number_format($previousMargin, 1) . "%")
                 ->descriptionIcon($profitMargin >= 20 ? 'heroicon-m-check-circle' : 'heroicon-m-exclamation-triangle')
                 ->color($profitMargin >= 20 ? 'success' : ($profitMargin >= 10 ? 'warning' : 'danger')),
 
@@ -87,10 +94,10 @@ class OwnerProfitabilityWidget extends BaseWidget
         ];
     }
 
-    private function getTotalRevenue(Carbon $start, Carbon $end, int $branchId): float
+    private function getTotalRevenue($start, $end, int $branchId): float
     {
         $bookingRevenue = Booking::where('branch_id', $branchId)
-            ->whereBetween('appointment_date', [$start->toDateString(), $end->toDateString()])
+            ->whereBetween('appointment_date', [$start, $end])
             ->where('payment_status', 'completed')
             ->sum('total_amount');
 
@@ -102,19 +109,19 @@ class OwnerProfitabilityWidget extends BaseWidget
         return $bookingRevenue + $posRevenue;
     }
 
-    private function getTotalExpenses(Carbon $start, Carbon $end, int $branchId): float
+    private function getTotalExpenses($start, $end, int $branchId): float
     {
         return Expense::where('branch_id', $branchId)
-            ->whereBetween('expense_date', [$start->toDateString(), $end->toDateString()])
+            ->whereBetween('expense_date', [$start, $end])
             ->where('status', 'approved')
             ->sum('amount');
     }
 
-    private function getStaffCosts(Carbon $start, Carbon $end, int $branchId): float
+    private function getStaffCosts($start, $end, int $branchId): float
     {
         return StaffCommission::where('branch_id', $branchId)
-            ->whereBetween('earned_date', [$start->toDateString(), $end->toDateString()])
-            ->where('payment_status', 'paid')
+            ->whereBetween('earned_date', [$start, $end])
+            ->where('approval_status', 'approved')
             ->sum('total_earning');
     }
 

@@ -6,13 +6,15 @@ use App\Models\Expense;
 use App\Models\ExpenseCategory;
 use Filament\Widgets\ChartWidget;
 use Filament\Facades\Filament;
+use Filament\Widgets\Concerns\InteractsWithPageFilters;
 use Carbon\Carbon;
 
 class OwnerExpenseAnalyticsWidget extends ChartWidget
 {
-    protected static ?string $heading = 'Expense Analytics by Category';
+    use InteractsWithPageFilters;
     
-    protected static ?string $pollingInterval = '300s';
+    protected static ?string $pollingInterval = '15s';
+    protected static ?string $heading = 'Expense Analytics by Category';
     
     protected int | string | array $columnSpan = [
         'default' => 'full',
